@@ -1,0 +1,91 @@
+"""Shared test fixtures.
+
+{% if uses_database %}
+The suite runs against SQLite in memory rather than the real database, so
+`pytest` works on a laptop and in CI with nothing else running. The schema is
+created from the models, which also means a model you forget to import in
+`{{ package_name }}.models` will fail here.
+
+`httpx`'s ASGI transport does not run the lifespan handler, so the application's
+real engine is never opened; the `get_session` dependency is overridden with a
+session bound to the test engine instead.
+{% else %}
+The application is exercised through httpx's ASGI transport — no socket, no
+server process.
+{% endif %}
+"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+{% if uses_database %}
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
+{% endif %}
+
+{% if uses_database %}
+from {{ package_name }} import models  # noqa: F401 - registers every table on Base.metadata
+{% endif %}
+from {{ package_name }}.core.config import Settings
+{% if uses_database %}
+from {{ package_name }}.db.base import Base
+from {{ package_name }}.db.session import get_session
+{% endif %}
+from {{ package_name }}.main import create_app
+
+TEST_SETTINGS = Settings(
+    environment="test",
+    log_level="WARNING",
+{% if uses_database %}
+    database_url="sqlite+aiosqlite:///:memory:",
+{% endif %}
+)
+{% if uses_database %}
+
+
+@pytest.fixture
+async def session() -> AsyncIterator[AsyncSession]:
+    """A session on a fresh in-memory schema, isolated per test."""
+    engine = create_async_engine(
+        TEST_SETTINGS.database_url,
+        poolclass=StaticPool,  # keep the single in-memory connection alive
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    async with factory() as open_session:
+        yield open_session
+
+    await engine.dispose()
+
+
+@pytest.fixture
+async def client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
+    """An HTTP client wired to the app, sharing the test's session."""
+    app = create_app(TEST_SETTINGS)
+
+    async def override_get_session() -> AsyncIterator[AsyncSession]:
+        yield session
+        await session.commit()
+
+    app.dependency_overrides[get_session] = override_get_session
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as async_client:
+        yield async_client
+    app.dependency_overrides.clear()
+{% else %}
+
+
+@pytest.fixture
+async def client() -> AsyncIterator[AsyncClient]:
+    """An HTTP client wired straight to the ASGI app."""
+    app = create_app(TEST_SETTINGS)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as async_client:
+        yield async_client
+{% endif %}

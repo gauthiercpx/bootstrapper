@@ -1,0 +1,70 @@
+.DEFAULT_GOAL := help
+PYTHON ?= python{{ python_version }}
+VENV ?= .venv
+BIN := $(VENV)/bin
+
+.PHONY: help
+help: ## Show this help
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+
+$(BIN)/python:
+	$(PYTHON) -m venv $(VENV)
+	$(BIN)/python -m pip install --upgrade pip
+
+.PHONY: install
+install: $(BIN)/python ## Create the virtualenv and install dev dependencies
+	$(BIN)/pip install -e ".[dev]"
+
+.PHONY: run
+run: ## Run the API with autoreload on http://localhost:8000
+	$(BIN)/uvicorn {{ package_name }}.main:app --reload --host 127.0.0.1 --port 8000
+
+.PHONY: test
+test: ## Run the test suite
+	$(BIN)/pytest
+
+.PHONY: lint
+lint: ## Check formatting and lint rules
+	$(BIN)/ruff check .
+	$(BIN)/ruff format --check .
+
+.PHONY: fmt
+fmt: ## Apply formatting and safe lint fixes
+	$(BIN)/ruff check --fix .
+	$(BIN)/ruff format .
+
+.PHONY: typecheck
+typecheck: ## Run mypy
+	$(BIN)/mypy src
+
+.PHONY: check
+check: lint typecheck test ## Everything CI runs
+{% if uses_database %}
+
+.PHONY: migrate
+migrate: ## Apply migrations up to head
+	$(BIN)/alembic upgrade head
+
+.PHONY: revision
+revision: ## Autogenerate a migration: make revision m="add users"
+	$(BIN)/alembic revision --autogenerate -m "$(m)"
+
+.PHONY: downgrade
+downgrade: ## Roll back one migration
+	$(BIN)/alembic downgrade -1
+{% endif %}
+{% if has_addon('docker') %}
+
+.PHONY: up
+up: ## Start the stack in the background
+	docker compose up -d --build
+
+.PHONY: down
+down: ## Stop the stack
+	docker compose down
+
+.PHONY: logs
+logs: ## Follow application logs
+	docker compose logs -f api
+{% endif %}

@@ -1,0 +1,17 @@
+"""The API router tree.
+
+One place to mount every route module, so `main.py` stays a wiring file.
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter
+
+from .routes import health{% if uses_database %}, items{% endif %}
+
+
+api_router = APIRouter()
+api_router.include_router(health.router)
+{% if uses_database %}
+api_router.include_router(items.router)
+{% endif %}

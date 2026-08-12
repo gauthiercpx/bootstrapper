@@ -1,0 +1,73 @@
+"""CRUD for the example resource.
+
+This exists so the generated project has one end-to-end path that is actually
+exercised by the test suite: HTTP -> validation -> session -> database -> response.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ...models.item import Item
+from ...schemas.item import ItemCreate, ItemRead, ItemUpdate
+from ..deps import SessionDep
+
+router = APIRouter(prefix="/items", tags=["items"])
+
+
+async def _get_or_404(session: AsyncSession, item_id: int) -> Item:
+    item = await session.get(Item, item_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"item {item_id} not found")
+    return item
+
+
+@router.get("", response_model=list[ItemRead])
+async def list_items(
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[Item]:
+    """Page through items, newest first."""
+    result = await session.execute(
+        select(Item).order_by(Item.id.desc()).limit(limit).offset(offset)
+    )
+    return list(result.scalars())
+
+
+@router.post("", response_model=ItemRead, status_code=status.HTTP_201_CREATED)
+async def create_item(payload: ItemCreate, session: SessionDep) -> Item:
+    """Create an item."""
+    item = Item(**payload.model_dump())
+    session.add(item)
+    await session.flush()
+    await session.refresh(item)
+    return item
+
+
+@router.get("/{item_id}", response_model=ItemRead)
+async def get_item(item_id: int, session: SessionDep) -> Item:
+    """Fetch a single item."""
+    return await _get_or_404(session, item_id)
+
+
+@router.patch("/{item_id}", response_model=ItemRead)
+async def update_item(item_id: int, payload: ItemUpdate, session: SessionDep) -> Item:
+    """Partially update an item."""
+    item = await _get_or_404(session, item_id)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(item, field, value)
+    await session.flush()
+    await session.refresh(item)
+    return item
+
+
+@router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_item(item_id: int, session: SessionDep) -> None:
+    """Delete an item."""
+    item = await _get_or_404(session, item_id)
+    await session.delete(item)

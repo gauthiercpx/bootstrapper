@@ -1,0 +1,91 @@
+# {{ name }}
+
+{{ description or "A FastAPI service." }}
+
+Generated with [bootstrapper](https://github.com/gauthiercpx/bootstrapper)
+(`{{ template }}`{% if addons %} + {{ addons | join(", ") }}{% endif %}).
+
+## Stack
+
+- **FastAPI** on Python {{ python_version }}
+{% if uses_database %}
+- **{{ "PostgreSQL" if database == "postgres" else "SQLite" }}** via async SQLAlchemy 2.0
+- **Alembic** migrations, wired to the same settings as the app
+{% endif %}
+- **pytest** ({{ "SQLite in memory, so no services are needed to run the suite" if uses_database else "httpx ASGI transport, no server needed" }})
+- **ruff** + **mypy**
+
+## Layout
+
+```
+src/{{ package_name }}/
+  main.py            application factory and lifespan
+  api/router.py      where routes are mounted
+  api/routes/        one module per resource
+  core/config.py     settings, read from the environment
+  core/logging.py    text logs locally, JSON in production
+{% if uses_database %}
+  db/session.py      engine + one transaction per request
+  db/base.py         declarative base and naming conventions
+  models/            SQLAlchemy models
+  schemas/           request and response models
+migrations/          Alembic
+{% endif %}
+tests/
+```
+
+## Quickstart
+
+```bash
+make install
+{% if uses_database and database == "postgres" %}
+cp .env.example .env
+{% if has_addon('docker') %}
+make up            # API + Postgres in Docker
+{% else %}
+# point {{ env_prefix }}DATABASE_URL at a running Postgres, then:
+make migrate
+make run
+{% endif %}
+{% else %}
+cp .env.example .env
+make run
+{% endif %}
+make test
+```
+
+- API: http://localhost:8000
+- Docs: http://localhost:8000/docs
+- Health: http://localhost:8000/health/live and `/health/ready`
+
+## Configuration
+
+Every setting is an environment variable prefixed `{{ env_prefix }}`, or a line
+in `.env` for local development. See `.env.example` and
+`src/{{ package_name }}/core/config.py`.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `{{ env_prefix }}ENVIRONMENT` | `local` | `local`, `test`, `staging`, `production` |
+| `{{ env_prefix }}LOG_LEVEL` | `INFO` | JSON logs once environment is `production` |
+| `{{ env_prefix }}CORS_ORIGINS` | `["http://localhost:5173"]` | JSON list |
+{% if uses_database %}
+| `{{ env_prefix }}DATABASE_URL` | see `.env.example` | async driver required |
+{% endif %}
+{% if uses_database %}
+
+## Migrations
+
+```bash
+make revision m="add users table"   # autogenerate from the models
+make migrate                        # apply
+make downgrade                      # roll back one
+```
+
+A model is only visible to autogenerate if it is imported in
+`src/{{ package_name }}/models/__init__.py`.
+{% endif %}
+
+## Commands
+
+Run `make help` for the full list.

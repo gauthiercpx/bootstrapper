@@ -1,0 +1,57 @@
+"""Application settings.
+
+Values come from the environment (and a local `.env` in development), never
+from hardcoded defaults for anything secret. Settings are read once and cached
+so importing this module has no cost at call sites.
+"""
+
+from __future__ import annotations
+
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Everything the service needs to run, resolved from the environment."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="{{ env_prefix }}",
+        extra="ignore",
+    )
+
+    app_name: str = "{{ name }}"
+    environment: Literal["local", "test", "staging", "production"] = "local"
+    debug: bool = False
+    log_level: str = "INFO"
+
+    host: str = "0.0.0.0"  # noqa: S104 - containers must bind all interfaces
+    port: int = 8000
+    root_path: str = ""
+
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+{% if uses_database %}
+
+{% if database == "postgres" %}
+    database_url: str = "postgresql+asyncpg://{{ package_name }}:{{ package_name }}@localhost:5432/{{ package_name }}"
+{% else %}
+    database_url: str = "sqlite+aiosqlite:///./{{ package_name }}.db"
+{% endif %}
+    database_echo: bool = False
+    database_pool_size: int = 5
+    database_max_overflow: int = 10
+{% endif %}
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment == "production"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Cached accessor. Override in tests with `get_settings.cache_clear()`."""
+    return Settings()

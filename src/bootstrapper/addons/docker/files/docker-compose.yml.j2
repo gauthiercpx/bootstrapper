@@ -1,0 +1,49 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      {{ env_prefix }}ENVIRONMENT: local
+      {{ env_prefix }}LOG_LEVEL: INFO
+{% if uses_database and database == "postgres" %}
+      # `db` is the compose service name, reachable on the compose network.
+      {{ env_prefix }}DATABASE_URL: postgresql+asyncpg://{{ package_name }}:{{ package_name }}@db:5432/{{ package_name }}
+{% elif uses_database %}
+      {{ env_prefix }}DATABASE_URL: sqlite+aiosqlite:////data/{{ package_name }}.db
+    volumes:
+      - app-data:/data
+{% endif %}
+{% if uses_database and database == "postgres" %}
+    depends_on:
+      db:
+        condition: service_healthy
+{% endif %}
+    restart: unless-stopped
+{% if uses_database and database == "postgres" %}
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: {{ package_name }}
+      POSTGRES_PASSWORD: {{ package_name }}
+      POSTGRES_DB: {{ package_name }}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # The API waits on this, so it must test the database, not just the port.
+      test: ["CMD-SHELL", "pg_isready -U {{ package_name }} -d {{ package_name }}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+{% elif uses_database %}
+
+volumes:
+  app-data:
+{% endif %}

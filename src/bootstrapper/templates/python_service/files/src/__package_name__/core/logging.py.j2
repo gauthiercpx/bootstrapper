@@ -1,0 +1,60 @@
+"""Logging setup.
+
+JSON lines in production so log aggregators can parse them; plain text locally
+so humans can read them.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import sys
+from typing import Any
+
+from .config import Settings
+
+_RESERVED = frozenset(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {
+    "message",
+    "asctime",
+    "taskName",
+}
+
+
+class JsonFormatter(logging.Formatter):
+    """Render records as one JSON object per line."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, Any] = {
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "time": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        # Anything passed via `logger.info(..., extra={...})` rides along.
+        payload.update(
+            {key: value for key, value in record.__dict__.items() if key not in _RESERVED}
+        )
+        return json.dumps(payload, default=str)
+
+
+def configure_logging(settings: Settings) -> None:
+    """Install a single stdout handler. Safe to call more than once."""
+    handler = logging.StreamHandler(sys.stdout)
+    if settings.is_production:
+        handler.setFormatter(JsonFormatter())
+    else:
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)-8s %(name)s: %(message)s", "%H:%M:%S")
+        )
+
+    root = logging.getLogger()
+    root.handlers = [handler]
+    root.setLevel(settings.log_level.upper())
+
+    # uvicorn installs its own handlers; make it use ours instead.
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        logger = logging.getLogger(name)
+        logger.handlers = []
+        logger.propagate = True

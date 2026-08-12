@@ -1,0 +1,57 @@
+name: Publish image
+
+on:
+  push:
+    branches: [{{ default_branch }}]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-{{ gh('github.ref') }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: {{ gh('github.repository') }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        # GITHUB_TOKEN is enough here — no registry secret to rotate.
+        uses: docker/login-action@v3
+        with:
+          registry: {{ gh('env.REGISTRY') }}
+          username: {{ gh('github.actor') }}
+          password: {{ gh('secrets.GITHUB_TOKEN') }}
+
+      - name: Derive tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: {{ gh('env.REGISTRY') }}/{{ gh('env.IMAGE_NAME') }}
+          # `{{ '{{version}}' }}` here is docker/metadata-action's own syntax, not ours.
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{ '{{version}}' }}
+            type=semver,pattern={{ '{{major}}.{{minor}}' }}
+            type=sha,format=long
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: {{ gh('steps.meta.outputs.tags') }}
+          labels: {{ gh('steps.meta.outputs.labels') }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

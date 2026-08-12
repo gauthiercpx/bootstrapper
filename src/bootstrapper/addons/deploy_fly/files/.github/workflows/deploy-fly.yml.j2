@@ -1,0 +1,32 @@
+name: Deploy to Fly.io
+
+on:
+  push:
+    branches: [{{ default_branch }}]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-fly-{{ slug }}
+  cancel-in-progress: false
+
+env:
+  FLY_API_TOKEN: {{ gh('secrets.FLY_API_TOKEN') }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy
+        run: flyctl deploy --remote-only
+{% if uses_database %}
+
+      - name: Apply migrations
+        run: flyctl ssh console --command "alembic upgrade head"
+{% endif %}

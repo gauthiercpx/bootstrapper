@@ -1,0 +1,22 @@
+"""Health endpoints — the first thing a deployment checks."""
+
+from __future__ import annotations
+
+from httpx import AsyncClient
+
+
+async def test_live_reports_service_metadata(client: AsyncClient) -> None:
+    response = await client.get("/health/live")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["service"] == "{{ name }}"
+    assert body["environment"] == "test"
+
+
+async def test_ready_succeeds(client: AsyncClient) -> None:
+    response = await client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"

@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bootstrapper"
+version = "0.1.0"
+description = "Modular CLI to bootstrap new projects: repo skeleton, GitHub Actions and deployment."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "gauthiercpx" }]
+keywords = ["scaffold", "generator", "template", "cli", "bootstrap"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Code Generators",
+]
+dependencies = [
+  "typer>=0.12",
+  "rich>=13.7",
+  "jinja2>=3.1",
+  "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.5",
+  "mypy>=1.10",
+  "pyyaml>=6.0",       # so tests can assert the generated workflows really parse
+  "types-pyyaml>=6.0",
+]
+
+[project.scripts]
+bootstrapper = "bootstrapper.cli:main"
+bstrap = "bootstrapper.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/gauthiercpx/bootstrapper"
+Issues = "https://github.com/gauthiercpx/bootstrapper/issues"
+
+# Third-party packages can extend the CLI by exposing these entry point groups.
+# See docs/plugins.md.
+[project.entry-points."bootstrapper.templates"]
+
+[project.entry-points."bootstrapper.addons"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bootstrapper"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/bootstrapper/templates" = "bootstrapper/templates"
+"src/bootstrapper/addons" = "bootstrapper/addons"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# Template payloads are Jinja sources, not importable Python.
+extend-exclude = ["src/bootstrapper/templates/*/files", "src/bootstrapper/addons/*/files"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+exclude = "(templates|addons)/[^/]+/files/"

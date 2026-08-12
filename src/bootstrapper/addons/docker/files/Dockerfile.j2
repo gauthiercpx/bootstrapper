@@ -1,0 +1,46 @@
+# Multi-stage: dependencies are resolved once in the builder, and the runtime
+# image carries only the virtualenv and the source — no compiler, no build cache.
+FROM python:{{ python_version }}-slim AS builder
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /build
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy only what the install needs first, so the layer caches across code edits.
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN pip install --upgrade pip && pip install .
+
+
+FROM python:{{ python_version }}-slim AS runtime
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    {{ env_prefix }}ENVIRONMENT=production
+
+# Run as a non-root user; some platforms refuse root containers outright.
+RUN useradd --create-home --uid 10001 app
+WORKDIR /app
+
+# The application itself is already installed into the virtualenv by the builder.
+COPY --from=builder /opt/venv /opt/venv
+{% if uses_database %}
+# Migrations are not part of the package, and the container has to be able to
+# run `alembic upgrade head` before serving.
+COPY --chown=app:app alembic.ini ./
+COPY --chown=app:app migrations ./migrations
+{% endif %}
+
+USER app
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2).status == 200 else 1)"
+
+CMD ["uvicorn", "{{ package_name }}.main:app", "--host", "0.0.0.0", "--port", "8000"]

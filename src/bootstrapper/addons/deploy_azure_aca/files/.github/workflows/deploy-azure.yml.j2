@@ -1,0 +1,108 @@
+name: Deploy to Azure Container Apps
+
+on:
+  push:
+    branches: [{{ default_branch }}]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  # Never let two rollouts of the same service overlap.
+  group: deploy-aca-{{ slug }}
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: rg-{{ slug }}
+  CONTAINER_APP_NAME: {{ slug }}
+  CONTAINER_ENV: env-{{ slug }}
+  IMAGE_NAME: {{ slug }}
+
+jobs:
+  build:
+    name: Build and push to ACR
+    runs-on: ubuntu-latest
+    outputs:
+      image: {{ gh('steps.image.outputs.reference') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: {{ gh('secrets.AZURE_CONTAINER_REGISTRY') }}
+          username: {{ gh('secrets.REGISTRY_USERNAME') }}
+          password: {{ gh('secrets.REGISTRY_PASSWORD') }}
+
+      - name: Resolve image reference
+        id: image
+        run: echo "reference={{ gh('secrets.AZURE_CONTAINER_REGISTRY') }}/{{ gh('env.IMAGE_NAME') }}:sha-{{ gh('github.sha') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            {{ gh('steps.image.outputs.reference') }}
+            {{ gh('secrets.AZURE_CONTAINER_REGISTRY') }}/{{ gh('env.IMAGE_NAME') }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Roll out
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: {{ gh('secrets.AZURE_CREDENTIALS') }}
+
+      - name: Update the Container App
+        shell: bash
+        env:
+          IMAGE: {{ gh('needs.build.outputs.image') }}
+          REGISTRY: {{ gh('secrets.AZURE_CONTAINER_REGISTRY') }}
+          REGISTRY_USERNAME: {{ gh('secrets.REGISTRY_USERNAME') }}
+          REGISTRY_PASSWORD: {{ gh('secrets.REGISTRY_PASSWORD') }}
+        run: |
+          set -euo pipefail
+          echo "Deploying ${IMAGE}"
+
+          az extension add --name containerapp --upgrade --yes --allow-preview true
+
+          # First deploy creates the app; later ones only swap the image.
+          if az containerapp show --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --only-show-errors >/dev/null 2>&1; then
+            az containerapp update \
+              --name "$CONTAINER_APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --image "$IMAGE"
+          else
+            az containerapp create \
+              --name "$CONTAINER_APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --environment "$CONTAINER_ENV" \
+              --image "$IMAGE" \
+              --target-port 8000 \
+              --ingress external \
+              --registry-server "$REGISTRY" \
+              --registry-username "$REGISTRY_USERNAME" \
+              --registry-password "$REGISTRY_PASSWORD"
+          fi
+{% if uses_database %}
+
+      - name: Apply migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Runs inside a replica of the image that was just deployed.
+          az containerapp exec \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --command "alembic upgrade head"
+{% endif %}

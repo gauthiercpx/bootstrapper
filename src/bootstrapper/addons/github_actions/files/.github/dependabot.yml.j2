@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for the routine bumps; security updates still come through alone.
+      python-minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+{% if has_addon('docker') %}
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: monthly
+{% endif %}

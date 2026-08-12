@@ -1,0 +1,32 @@
+"""Shared FastAPI dependencies.
+
+Settings are read from `request.app.state`, not from the module-level cache, so
+whatever `create_app(settings)` was given is what every route sees. That is what
+lets tests build an app with test settings and have them honoured end to end.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import Depends, Request
+{% if uses_database %}
+from sqlalchemy.ext.asyncio import AsyncSession
+{% endif %}
+
+from ..core.config import Settings
+{% if uses_database %}
+from ..db.session import get_session
+{% endif %}
+
+
+def get_app_settings(request: Request) -> Settings:
+    """The settings this application instance was created with."""
+    settings: Settings = request.app.state.settings
+    return settings
+
+
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
+{% if uses_database %}
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+{% endif %}

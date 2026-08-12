@@ -1,0 +1,48 @@
+"""Liveness and readiness endpoints.
+
+`/health/live` answers "is the process up" and must never touch a dependency —
+an orchestrator uses it to decide whether to restart the process.
+`/health/ready` answers "can it serve traffic" and therefore does check the
+database.
+"""
+
+from __future__ import annotations
+
+{% if uses_database %}
+from fastapi import APIRouter, Response, status
+from sqlalchemy import text
+
+from ..deps import SessionDep, SettingsDep
+{% else %}
+from fastapi import APIRouter
+
+from ..deps import SettingsDep
+{% endif %}
+
+router = APIRouter(prefix="/health", tags=["health"])
+
+
+@router.get("/live")
+async def live(settings: SettingsDep) -> dict[str, str]:
+    """Process is running."""
+    return {"status": "ok", "service": settings.app_name, "environment": settings.environment}
+{% if uses_database %}
+
+
+@router.get("/ready")
+async def ready(response: Response, session: SessionDep) -> dict[str, str]:
+    """Process is running *and* the database answers."""
+    try:
+        await session.execute(text("SELECT 1"))
+    except Exception as exc:  # noqa: BLE001 - the reason is reported, not swallowed
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "unavailable", "database": type(exc).__name__}
+    return {"status": "ok", "database": "ok"}
+{% else %}
+
+
+@router.get("/ready")
+async def ready() -> dict[str, str]:
+    """No external dependencies to check yet."""
+    return {"status": "ok"}
+{% endif %}

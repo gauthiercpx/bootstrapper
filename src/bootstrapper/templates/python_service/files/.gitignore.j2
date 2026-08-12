@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+.env.*
+!.env.example
+{% if uses_database and database == "sqlite" %}
+
+# Local database
+*.db
+*.sqlite3
+{% endif %}
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
