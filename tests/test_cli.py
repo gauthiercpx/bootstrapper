@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from bootstrapper.cli import app
+from bootstrapper.core import BootstrapperError
 
 runner = CliRunner()
 
@@ -129,3 +131,49 @@ def test_schema_is_json(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "name" in json.loads(target.read_text())["properties"]
+
+
+def test_schema_prints_to_stdout_without_output(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["schema"])
+
+    assert result.exit_code == 0
+    assert "name" in json.loads(result.output)["properties"]
+
+
+def test_version_prints_something() -> None:
+    result = runner.invoke(app, ["version"])
+
+    assert result.exit_code == 0
+    assert result.output.strip()
+
+
+def test_new_with_owner_suggests_gh_repo_create(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["new", "Market API", "-o", str(tmp_path), "--no-git", "--yes", "--owner", "gauthiercpx"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "gh repo create gauthiercpx/market-api" in result.output
+
+
+def test_new_reports_git_steps(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["new", "Market API", "-o", str(tmp_path), "--yes"])
+
+    assert result.exit_code == 0, result.output
+    # Either it initialised the repo, or it said why not -- both are reported.
+    assert "git init" in result.output or "!" in result.output
+
+
+def test_main_turns_bootstrapper_errors_into_a_clean_exit(monkeypatch: pytest.MonkeyPatch) -> None:
+    from bootstrapper import cli
+
+    def boom() -> None:
+        raise BootstrapperError("boom")
+
+    monkeypatch.setattr(cli, "app", boom)
+
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main()
+
+    assert excinfo.value.code == 1
