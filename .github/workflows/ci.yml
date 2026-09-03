@@ -50,6 +50,9 @@ jobs:
     name: SonarCloud analysis
     runs-on: ubuntu-latest
     needs: quality
+    # Free-tier SonarCloud orgs can only analyze the main branch -- a PR's
+    # merge ref counts as a non-main branch and gets rejected.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
       # Job-level so a step `if:` can check it -- secrets aren't readable
       # directly in `if:` conditions. Empty until SONAR_TOKEN is added as a
