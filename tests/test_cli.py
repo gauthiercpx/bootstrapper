@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from bootstrapper.cli import app
-from bootstrapper.core import BootstrapperError
+from bootstrapper.cli import _report_result, _spec_from_flags, app
+from bootstrapper.core import BootstrapperError, FileAction, GenerationResult, Plan, ProjectSpec
 
 runner = CliRunner()
 
@@ -122,6 +122,44 @@ def test_missing_name_without_a_tty_is_an_error(tmp_path: Path) -> None:
     result = runner.invoke(app, ["new", "-o", str(tmp_path), "--yes"])
 
     assert result.exit_code != 0
+
+
+def test_missing_name_in_interactive_mode_is_prompted(monkeypatch: pytest.MonkeyPatch) -> None:
+    from bootstrapper import cli
+
+    monkeypatch.setattr(cli.typer, "prompt", lambda _: "Prompted Project")
+
+    spec = _spec_from_flags(
+        cli._registry(),
+        name=None,
+        template="python-service",
+        addon=None,
+        no_default_addons=True,
+        database=None,
+        python_version="3.12",
+        description="",
+        author="",
+        author_email="",
+        license_=cli.License.mit,
+        github_owner="",
+        default_branch="main",
+        no_git=True,
+        interactive=True,
+    )
+
+    assert spec.name == "Prompted Project"
+
+
+def test_report_result_mentions_plan_overrides(capsys: pytest.CaptureFixture[str]) -> None:
+    spec = ProjectSpec(name="Market API")
+    plan = Plan()
+    plan.add(FileAction(path="README.md", content=b"base", origin="template"))
+    plan.add(FileAction(path="README.md", content=b"addon", origin="docker"))
+    result = GenerationResult(spec=spec, destination=Path("market-api"), plan=plan, written=[])
+
+    _report_result(spec, Path("market-api"), result)
+
+    assert "README.md: docker overrode template" in capsys.readouterr().out
 
 
 def test_schema_is_json(tmp_path: Path) -> None:
