@@ -21,7 +21,7 @@ def _plan_paths(**kwargs: object) -> set[str]:
 
 
 def test_default_selection_produces_a_complete_project() -> None:
-    paths = _plan_paths(addons=["docker", "github-actions", "pre-commit"])
+    paths = _plan_paths(addons=["docker", "github-actions", "pre-commit", "ai-assistant"])
 
     assert {
         "pyproject.toml",
@@ -42,6 +42,8 @@ def test_default_selection_produces_a_complete_project() -> None:
         "docker-compose.yml",
         ".github/workflows/ci.yml",
         ".pre-commit-config.yaml",
+        "AGENTS.md",
+        "CLAUDE.md",
     } <= paths
 
 
@@ -62,6 +64,27 @@ def test_addons_only_contribute_their_own_files() -> None:
     with_docker = _plan_paths(addons=["docker"])
 
     assert with_docker - without == {"Dockerfile", "docker-compose.yml", ".dockerignore"}
+
+
+def test_ai_assistant_addon_describes_the_project() -> None:
+    spec = ProjectSpec(name="Market API", addons=["pre-commit", "ai-assistant"])
+    plan = build_plan(spec)
+
+    claude_md = plan.actions["CLAUDE.md"].text
+    agents_md = plan.actions["AGENTS.md"].text
+
+    # CLAUDE.md defers to AGENTS.md rather than duplicating it.
+    assert claude_md.strip() == "@AGENTS.md"
+    assert "make check" in agents_md
+    assert "pre-commit install" in agents_md  # only present because pre-commit is selected
+    assert "MARKET_API_" in agents_md
+
+
+def test_ai_assistant_addon_omits_addon_specific_sections_when_not_selected() -> None:
+    spec = ProjectSpec(name="Market API", addons=["ai-assistant"])
+    agents_md = build_plan(spec).actions["AGENTS.md"].text
+
+    assert "pre-commit install" not in agents_md
 
 
 @pytest.mark.parametrize("database", list(Database))

@@ -42,7 +42,7 @@ TEMPLATE = Template(
     root=_ROOT,
     language="python",
     order=0,
-    default_addons=("docker", "github-actions", "pre-commit"),
+    default_addons=("docker", "github-actions", "pre-commit", "ai-assistant"),
     skip=_skip,
 )
 

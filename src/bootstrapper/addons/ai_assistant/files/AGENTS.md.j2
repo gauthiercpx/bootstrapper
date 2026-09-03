@@ -1,0 +1,47 @@
+# Working in {{ name }}
+
+## Commands
+
+```bash
+make install    # create the venv, install with dev dependencies
+make check      # everything CI runs: lint, typecheck, test
+make test       # pytest only
+make run        # run the API with autoreload on http://localhost:8000
+{% if has_addon('docker') %}make up         # start the local stack (docker compose) in the background
+make logs       # follow application logs
+{% endif %}
+```
+{% if uses_database %}
+
+## Migrations
+
+Alembic reads its database URL from `Settings` (`src/{{ package_name }}/core/config.py`),
+the same object the app itself reads — never point a migration at a different
+database than the app runs against, and never hardcode a connection string in
+`alembic.ini` or a migration file.
+
+```bash
+make revision m="add users"   # autogenerate, then read the diff before trusting it
+make migrate                  # apply to head
+```
+{% endif %}
+
+## Conventions
+
+- Ruff and `mypy --strict` are both enforced in CI (`make check`); run it
+  before committing rather than finding out there.
+- Settings come from the environment via pydantic-settings
+  (`{{ env_prefix }}*` variables) — don't read `os.environ` directly in
+  application code, and don't hardcode anything secret as a default.
+- Tests run against SQLite in memory (`tests/conftest.py`), so `make test`
+  needs nothing else running. A new endpoint or model needs a test that
+  exercises it through those fixtures, not a new ad hoc setup.
+- `/health/live` and `/health/ready` are separate on purpose — don't collapse
+  them, an orchestrator needs to tell "restart me" from "don't route to me
+  yet" apart.
+{% if has_addon('pre-commit') %}
+## Before committing
+
+`pre-commit install` once per clone. If a hook fails, fix what it flagged
+rather than skipping it with `--no-verify`.
+{% endif %}
