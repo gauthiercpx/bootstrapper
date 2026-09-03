@@ -52,26 +52,34 @@ def test_resolution_is_ordered_by_render_order(tmp_path: Path) -> None:
 
 
 def test_two_addons_in_the_same_group_are_rejected(tmp_path: Path) -> None:
+    registry = _registry(tmp_path)
+
     with pytest.raises(IncompatibleSelection, match="only one 'deploy'"):
-        _registry(tmp_path).resolve("svc", ["deploy-a", "deploy-b"])
+        registry.resolve("svc", ["deploy-a", "deploy-b"])
 
 
 def test_declared_conflicts_are_rejected(tmp_path: Path) -> None:
+    registry = _registry(tmp_path)
+
     with pytest.raises(IncompatibleSelection, match="conflicts with"):
-        _registry(tmp_path).resolve("svc", ["a", "b"])
+        registry.resolve("svc", ["a", "b"])
 
 
 def test_addon_not_applicable_to_the_template_is_rejected(tmp_path: Path) -> None:
+    registry = _registry(tmp_path)
+
     with pytest.raises(IncompatibleSelection, match="does not apply"):
-        _registry(tmp_path).resolve("lib", ["svc-only"])
+        registry.resolve("lib", ["svc-only"])
 
 
 def test_unknown_names_list_the_alternatives(tmp_path: Path) -> None:
+    registry = _registry(tmp_path)
+
     with pytest.raises(UnknownComponent, match="Available:"):
-        _registry(tmp_path).resolve("svc", ["nope"])
+        registry.resolve("svc", ["nope"])
 
     with pytest.raises(UnknownComponent, match="unknown template"):
-        _registry(tmp_path).template("nope")
+        registry.template("nope")
 
 
 def test_builtins_are_discovered() -> None:

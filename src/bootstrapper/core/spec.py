@@ -123,7 +123,7 @@ class ProjectSpec(BaseModel):
         """The variable namespace handed to Jinja."""
         data = self.model_dump(mode="json")
         data["uses_database"] = self.uses_database
-        data["addons_enabled"] = {addon: True for addon in self.addons}
+        data["addons_enabled"] = dict.fromkeys(self.addons, True)
         data["has_addon"] = lambda addon: addon in self.addons
         return data
 

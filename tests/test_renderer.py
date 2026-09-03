@@ -53,9 +53,12 @@ def test_j2_files_are_rendered_and_others_copied(tmp_path: Path) -> None:
 
 def test_undefined_variables_fail_loudly(tmp_path: Path) -> None:
     component = _component(tmp_path, {"broken.txt.j2": "{{ nope }}"})
+    # render_component is a generator -- calling it doesn't run the body yet,
+    # so building it here still leaves list() as the sole call that can raise.
+    actions = Renderer().render_component(component, {})
 
     with pytest.raises(RenderError, match="broken.txt.j2"):
-        list(Renderer().render_component(component, {}))
+        list(actions)
 
 
 def test_skip_predicate_drops_files(tmp_path: Path) -> None:

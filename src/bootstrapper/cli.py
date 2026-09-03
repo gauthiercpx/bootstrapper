@@ -21,6 +21,7 @@ from . import __version__
 from .core import (
     BootstrapperError,
     Database,
+    GenerationResult,
     License,
     ProjectSpec,
     Registry,
@@ -101,31 +102,26 @@ def new(  # noqa: PLR0913 - a scaffolder command is inherently option-heavy
 ) -> None:
     """Create a new project."""
     registry = _registry()
-    interactive = not yes and sys.stdin.isatty()
 
     if spec_file is not None:
         spec = ProjectSpec.from_file(spec_file)
     else:
-        if not name:
-            if not interactive:
-                raise typer.BadParameter("a project name is required (or pass --spec)")
-            name = typer.prompt("Project name")
-        selected = _resolve_addons(registry, template, addon, no_default_addons=no_default_addons)
-        if database is None:
-            database = Database.postgres
-        spec = ProjectSpec(
+        spec = _spec_from_flags(
+            registry,
             name=name,
             template=template,
-            addons=selected,
+            addon=addon,
+            no_default_addons=no_default_addons,
+            database=database,
+            python_version=python_version,
             description=description,
             author=author,
             author_email=author_email,
-            license=license_,
-            python_version=python_version,
-            database=database,
+            license_=license_,
             github_owner=github_owner,
             default_branch=default_branch,
-            git_init=not no_git,
+            no_git=no_git,
+            interactive=not yes and sys.stdin.isatty(),
         )
 
     if no_git:
@@ -149,13 +145,57 @@ def new(  # noqa: PLR0913 - a scaffolder command is inherently option-heavy
         )
         return
 
+    _report_result(spec, destination, result)
+
+
+def _spec_from_flags(
+    registry: Registry,
+    *,
+    name: str | None,
+    template: str,
+    addon: list[str] | None,
+    no_default_addons: bool,
+    database: Database | None,
+    python_version: str,
+    description: str,
+    author: str,
+    author_email: str,
+    license_: License,
+    github_owner: str,
+    default_branch: str,
+    no_git: bool,
+    interactive: bool,
+) -> ProjectSpec:
+    """Build a `ProjectSpec` from `new`'s flags, prompting for a name if needed."""
+    if not name:
+        if not interactive:
+            raise typer.BadParameter("a project name is required (or pass --spec)")
+        name = typer.prompt("Project name")
+    selected = _resolve_addons(registry, template, addon, no_default_addons=no_default_addons)
+    return ProjectSpec(
+        name=name,
+        template=template,
+        addons=selected,
+        description=description,
+        author=author,
+        author_email=author_email,
+        license=license_,
+        python_version=python_version,
+        database=database or Database.postgres,
+        github_owner=github_owner,
+        default_branch=default_branch,
+        git_init=not no_git,
+    )
+
+
+def _report_result(spec: ProjectSpec, destination: Path, result: GenerationResult) -> None:
     console.print(
         f"[green]✓[/green] created [bold]{spec.name}[/bold] "
         f"({len(result.written)} files) in [cyan]{destination}[/cyan]"
     )
     if result.plan.overrides:
-        for path, previous, new in result.plan.overrides:
-            console.print(f"  [dim]{path}: {new} overrode {previous}[/dim]")
+        for path, previous, new_origin in result.plan.overrides:
+            console.print(f"  [dim]{path}: {new_origin} overrode {previous}[/dim]")
     if result.git is not None:
         for step in result.git.steps:
             console.print(f"  [dim]{step}[/dim]")

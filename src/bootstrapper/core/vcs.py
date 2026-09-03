@@ -27,9 +27,8 @@ class GitResult:
 
 
 def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(  # noqa: S603 - fixed argv, no shell
-        args, cwd=cwd, capture_output=True, text=True, check=False
-    )
+    # Fixed argv, no shell.
+    return subprocess.run(args, cwd=cwd, capture_output=True, text=True, check=False)  # noqa: S603
 
 
 def git_available() -> bool:
