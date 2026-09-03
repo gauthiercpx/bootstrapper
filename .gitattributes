@@ -1,0 +1,9 @@
+# Template and addon payloads are copied byte-for-byte to generated projects
+# (see src/bootstrapper/core/renderer.py); a checkout-time EOL rewrite would
+# silently corrupt them for anyone with core.autocrlf enabled.
+src/bootstrapper/templates/**/files/** -text
+src/bootstrapper/addons/**/files/** -text
+
+# Git hooks are invoked directly by git/sh; a CRLF line ending breaks the
+# shebang and the script fails to run at all.
+.githooks/* text eol=lf

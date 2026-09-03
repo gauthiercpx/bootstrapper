@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -58,6 +59,7 @@ def test_force_overwrites(tmp_path: Path) -> None:
     assert (tmp_path / "README.md").read_text() == "generated"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="NTFS has no POSIX executable bit")
 def test_executable_bit_is_preserved(tmp_path: Path) -> None:
     plan = _plan(FileAction(path="run.sh", content=b"#!/bin/sh\n", executable=True))
 

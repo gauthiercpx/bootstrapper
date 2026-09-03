@@ -14,7 +14,10 @@ def _component(tmp_path: Path, files: dict[str, str]) -> Component:
     for relative, content in files.items():
         target = tmp_path / "files" / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        # newline="" so these fixtures keep the LF they were written with instead of
+        # picking up the platform default (CRLF on Windows) -- the renderer's "copied
+        # byte for byte" contract is exactly what this test is checking.
+        target.write_text(content, encoding="utf-8", newline="")
     return Component(id="demo", summary="", root=tmp_path)
 
 
