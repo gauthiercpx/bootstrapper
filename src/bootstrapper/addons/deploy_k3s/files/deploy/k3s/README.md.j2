@@ -1,0 +1,27 @@
+# Deploying {{ name }} to k3s
+
+One-time setup, in your GitOps repo (`{{ github_owner or "YOUR_GITHUB_OWNER" }}/homelab`):
+
+1. Copy `infra/` here to `infra/{{ slug }}/` there.
+2. Copy `apps/{{ slug }}.yaml` here to `apps/{{ slug }}.yaml` there.
+3. Create the image pull secret once (see the comment in `infra/deployment.yaml`).
+{% if uses_database %}
+4. Create the `{{ slug }}` Secret the Deployment reads via `envFrom` (at least
+   `{{ env_prefix }}DATABASE_URL`) -- plain `Secret` for now, no Sealed
+   Secrets yet.
+{% endif %}
+5. Commit and push. The root app-of-apps `Application` watching `apps/`
+   picks up `{{ slug }}.yaml` and creates everything else, `CreateNamespace`
+   included.
+
+In **this** repo:
+
+- Add `GITOPS_DEPLOY_KEY` as a repo secret: an SSH private key added as a
+  *write*-access deploy key on the GitOps repo. `.github/workflows/deploy-k3s.yml`
+  uses it to push the image tag bump described below.
+
+After that, every push to `{{ default_branch }}` here builds a new image,
+pushes it to `ghcr.io` under a tag pinned to the commit (never `:latest` --
+ArgoCD only notices a change that actually edits the manifest), and commits
+that tag into `infra/{{ slug }}/deployment.yaml` in the GitOps repo. ArgoCD
+takes it from there -- nothing here ever runs `kubectl apply`.

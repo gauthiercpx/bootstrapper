@@ -1,0 +1,26 @@
+# One-time file: copy to apps/{{ slug }}.yaml in your GitOps repo and push.
+# The root app-of-apps Application picks it up from there; nothing here
+# changes on later deploys -- only infra/{{ slug }}/deployment.yaml's image
+# tag does, via .github/workflows/deploy-k3s.yml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ slug }}
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:{{ github_owner or "YOUR_GITHUB_OWNER" }}/homelab.git
+    targetRevision: {{ default_branch }}
+    path: infra/{{ slug }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ slug }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # Uncomment if this app ever ships CRDs of its own:
+      # - ServerSideApply=true

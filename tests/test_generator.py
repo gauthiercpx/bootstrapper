@@ -97,6 +97,7 @@ def test_ai_assistant_addon_omits_addon_specific_sections_when_not_selected() ->
         ["deploy-ghcr"],
         ["deploy-azure-aca"],
         ["deploy-fly"],
+        ["deploy-k3s"],
     ],
 )
 def test_every_combination_renders_valid_python(database: Database, addons: list[str]) -> None:
@@ -115,6 +116,7 @@ def test_every_combination_renders_valid_python(database: Database, addons: list
         ["deploy-ghcr"],
         ["deploy-azure-aca"],
         ["deploy-fly"],
+        ["deploy-k3s"],
     ],
 )
 def test_every_combination_renders_parseable_yaml(database: Database, addons: list[str]) -> None:
@@ -145,6 +147,24 @@ def test_github_actions_expressions_survive_rendering() -> None:
     assert "{%" not in publish  # no unrendered Jinja tags left behind
     # Indentation is intact: no expression got flattened to column zero.
     assert "\n${{" not in publish
+
+
+def test_deploy_k3s_addon_never_pins_a_mutable_tag() -> None:
+    spec = ProjectSpec(name="Market API", addons=["docker", "github-actions", "deploy-k3s"])
+    plan = build_plan(spec)
+
+    workflow = plan.actions[".github/workflows/deploy-k3s.yml"].text
+    deployment = plan.actions["deploy/k3s/infra/deployment.yaml"].text
+    application = plan.actions["deploy/k3s/apps/market-api.yaml"].text
+
+    image_lines = [line for line in deployment.splitlines() if "image:" in line]
+    assert image_lines == ["          image: ghcr.io/YOUR_GITHUB_OWNER/market-api:REPLACED_BY_CI"]
+    assert (
+        "tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.value }}" in workflow
+    )
+    assert "sha-$(echo ${{ github.sha }}" in workflow
+    assert "host: market-api.home.arpa" in plan.actions["deploy/k3s/infra/ingress.yaml"].text
+    assert "path: infra/market-api" in application
 
 
 def test_project_name_reaches_the_generated_sources() -> None:

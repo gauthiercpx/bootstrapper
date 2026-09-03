@@ -1,0 +1,19 @@
+# Plain HTTP -- no cert-manager yet. Resolve {{ slug }}.home.arpa via your
+# hosts file until it's on real DNS.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ slug }}
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ slug }}.home.arpa
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ slug }}
+                port:
+                  number: 80

@@ -53,6 +53,7 @@ Addons layer on top:
 | `deploy-ghcr` | build and push to ghcr.io on the default branch and tags |
 | `deploy-azure-aca` | push to ACR and roll out to Azure Container Apps |
 | `deploy-fly` | `fly.toml` and a deploy workflow |
+| `deploy-k3s` | k8s manifests plus a workflow for a k3s + ArgoCD GitOps homelab |
 
 Deployment addons are mutually exclusive — they share the `deploy` group, and
 the registry rejects a selection with two of them rather than generating two

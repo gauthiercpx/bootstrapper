@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ slug }}
+  labels:
+    app: {{ slug }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ slug }}
+  template:
+    metadata:
+      labels:
+        app: {{ slug }}
+    spec:
+      # Created once outside GitOps: no secrets management yet, so this isn't
+      # templated here.
+      #   kubectl create secret docker-registry ghcr-pull \
+      #     --docker-server=ghcr.io --docker-username=<user> \
+      #     --docker-password=<PAT with read:packages> -n {{ slug }}
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: {{ slug }}
+          # Managed by .github/workflows/deploy-k3s.yml -- do not hand-edit
+          # the tag, it is overwritten on every push to {{ default_branch }}.
+          image: ghcr.io/{{ github_owner or "YOUR_GITHUB_OWNER" }}/{{ slug }}:REPLACED_BY_CI
+          ports:
+            - containerPort: 8000
+{% if uses_database %}
+          envFrom:
+            - secretRef:
+                # Plain Secret for now (see the repo's own notes on Sealed
+                # Secrets not existing yet): {{ env_prefix }}DATABASE_URL and
+                # anything else the app needs from the environment.
+                name: {{ slug }}
+{% endif %}
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            # The box is small (2 GB usable today, ~8 GB once fixed) and
+            # unbounded pods will hurt -- adjust to what this service needs.
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

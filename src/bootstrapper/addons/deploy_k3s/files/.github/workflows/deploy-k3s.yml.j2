@@ -1,0 +1,87 @@
+# Requires one secret in this repo: GITOPS_DEPLOY_KEY, an SSH private key
+# added as a *write*-access deploy key on the GitOps repo (env.GITOPS_REPO
+# below). GITHUB_TOKEN (automatic) is enough to push to ghcr.io.
+name: Deploy to k3s
+
+on:
+  push:
+    branches: [{{ default_branch }}]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-k3s-{{ slug }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: {{ gh('github.repository') }}
+  # Change these if your GitOps repo isn't named "homelab" under this owner,
+  # or the app doesn't live at infra/{{ slug }} there.
+  GITOPS_REPO: {{ github_owner or "YOUR_GITHUB_OWNER" }}/homelab
+  GITOPS_PATH: infra/{{ slug }}
+
+jobs:
+  build:
+    name: Build and push
+    runs-on: ubuntu-latest
+    outputs:
+      tag: {{ gh('steps.tag.outputs.value') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: {{ gh('env.REGISTRY') }}
+          username: {{ gh('github.actor') }}
+          password: {{ gh('secrets.GITHUB_TOKEN') }}
+
+      - name: Resolve image tag
+        id: tag
+        # Pinned to the commit, never :latest -- ArgoCD only notices a change
+        # that actually edits the manifest, and a mutable tag would not.
+        run: echo "value=sha-$(echo {{ gh('github.sha') }} | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: {{ gh('env.REGISTRY') }}/{{ gh('env.IMAGE_NAME') }}:{{ gh('steps.tag.outputs.value') }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  bump-gitops:
+    name: Bump the pinned tag in the GitOps repo
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the GitOps repo
+        uses: actions/checkout@v4
+        with:
+          repository: {{ gh('env.GITOPS_REPO') }}
+          ssh-key: {{ gh('secrets.GITOPS_DEPLOY_KEY') }}
+          path: gitops
+
+      - name: Bump the deployment's image
+        working-directory: gitops
+        env:
+          IMAGE: {{ gh('env.REGISTRY') }}/{{ gh('env.IMAGE_NAME') }}:{{ gh('needs.build.outputs.tag') }}
+        run: |
+          set -euo pipefail
+          sed -i "s#image: .*#image: ${IMAGE}#" "{{ gh('env.GITOPS_PATH') }}/deployment.yaml"
+          git config user.name "bootstrapper-ci"
+          git config user.email "ci@users.noreply.github.com"
+          git add "{{ gh('env.GITOPS_PATH') }}/deployment.yaml"
+          if git diff --cached --quiet; then
+            echo "image already at ${IMAGE}, nothing to commit"
+          else
+            git commit -m "chore({{ slug }}): bump image to ${IMAGE}"
+            git push
+          fi
