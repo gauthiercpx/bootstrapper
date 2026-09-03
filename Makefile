@@ -37,6 +37,10 @@ typecheck: ## Run mypy
 .PHONY: check
 check: lint typecheck test ## Everything CI runs
 
+.PHONY: hooks
+hooks: ## Point git at the tracked hooks in .githooks (run once per clone)
+	git config core.hooksPath .githooks
+
 .PHONY: demo
 demo: ## Generate a sample project into build/ and show the tree
 	rm -rf build/demo && mkdir -p build/demo

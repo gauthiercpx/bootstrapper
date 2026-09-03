@@ -49,6 +49,7 @@ Addons layer on top:
 | `docker` | multi-stage Dockerfile (non-root, healthcheck) and a compose stack with Postgres |
 | `github-actions` | CI: lint, typecheck, tests, migrations apply, image builds. Plus Dependabot |
 | `pre-commit` | ruff and hygiene hooks |
+| `ai-assistant` | `AGENTS.md` and `CLAUDE.md` describing project commands and conventions |
 | `deploy-ghcr` | build and push to ghcr.io on the default branch and tags |
 | `deploy-azure-aca` | push to ACR and roll out to Azure Container Apps |
 | `deploy-fly` | `fly.toml` and a deploy workflow |
@@ -155,7 +156,11 @@ my-template = "my_package:COMPONENTS"
 ```bash
 make install
 make check     # ruff + mypy + pytest
+make hooks     # once per clone: run make check (and sonar-scanner, if installed) before every push
 ```
+
+CI also runs a SonarCloud analysis (`sonar-project.properties`); it stays a
+no-op until a `SONAR_TOKEN` repo secret is added.
 
 ## Status
 
